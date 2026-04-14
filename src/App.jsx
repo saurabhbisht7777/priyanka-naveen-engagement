@@ -17,7 +17,9 @@ function App() {
   const guestName = decodeURIComponent(params.get('to') || '');
   const isAnonymGuest = guestName === '';
 
-  const [showDetailContent, setShowDetailContent] = useState(false);
+  const [showDetailContent, setShowDetailContent] = useState(
+    () => sessionStorage.getItem('invitation_opened') === 'true'
+  );
   const [particlesReady, setParticlesReady] = useState(false);
 
   useEffect(() => {
@@ -41,6 +43,7 @@ function App() {
 
   const handleClickDetail = () => {
     setShowDetailContent(true);
+    sessionStorage.setItem('invitation_opened', 'true');
   };
 
   const renderDetailContent = () => {

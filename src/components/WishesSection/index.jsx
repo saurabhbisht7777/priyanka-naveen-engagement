@@ -3,6 +3,18 @@ import { motion, AnimatePresence } from 'framer-motion';
 
 const API_URL = '/api/wishes';
 const POLL_INTERVAL = 8000;
+const STORAGE_KEY = 'engagement_wishes';
+
+function loadFromStorage() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch { return []; }
+}
+
+function saveToStorage(wishes) {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(wishes)); } catch { /* quota */ }
+}
 
 function parseWish(item) {
   if (typeof item === 'string') {
@@ -23,13 +35,27 @@ function timeAgo(ts) {
   return `${days}d ago`;
 }
 
+function mergeWishes(apiWishes, localWishes) {
+  const seen = new Set();
+  const merged = [];
+  for (const w of [...apiWishes, ...localWishes]) {
+    const key = `${w.name}|${w.text}|${w.timestamp}`;
+    if (!seen.has(key)) {
+      seen.add(key);
+      merged.push(w);
+    }
+  }
+  merged.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+  return merged;
+}
+
 function WishesSection() {
-  const [wishes, setWishes] = useState([]);
+  const [wishes, setWishes] = useState(() => loadFromStorage());
   const [name, setName] = useState('');
   const [message, setMessage] = useState('');
   const [sending, setSending] = useState(false);
   const [status, setStatus] = useState('');
-  const [liveCount, setLiveCount] = useState(0);
+  const [apiAvailable, setApiAvailable] = useState(false);
   const pollRef = useRef(null);
 
   const fetchWishes = useCallback(async () => {
@@ -38,9 +64,15 @@ function WishesSection() {
       if (!res.ok) return;
       const data = await res.json();
       const parsed = (data.wishes || []).map(parseWish).filter(Boolean);
-      setWishes(parsed);
-      setLiveCount(parsed.length);
-    } catch { /* silent - API may not be configured yet */ }
+      setApiAvailable(true);
+      setWishes((prev) => {
+        const merged = mergeWishes(parsed, prev);
+        saveToStorage(merged);
+        return merged;
+      });
+    } catch {
+      setApiAvailable(false);
+    }
   }, []);
 
   useEffect(() => {
@@ -56,26 +88,48 @@ function WishesSection() {
     setSending(true);
     setStatus('');
 
-    try {
-      const res = await fetch(API_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: name.trim(), text: message.trim() }),
+    const wish = {
+      name: name.trim(),
+      text: message.trim(),
+      timestamp: Date.now(),
+    };
+
+    const addLocally = () => {
+      setWishes((prev) => {
+        const updated = [wish, ...prev];
+        saveToStorage(updated);
+        return updated;
       });
-
-      if (!res.ok) throw new Error('Failed to send');
-
-      const data = await res.json();
-      const parsed = (data.wishes || []).map(parseWish).filter(Boolean);
-      setWishes(parsed);
-      setLiveCount(parsed.length);
       setName('');
       setMessage('');
       setStatus('sent');
       setTimeout(() => setStatus(''), 3000);
+    };
+
+    try {
+      const res = await fetch(API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: wish.name, text: wish.text }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        const parsed = (data.wishes || []).map(parseWish).filter(Boolean);
+        setWishes((prev) => {
+          const merged = mergeWishes(parsed, prev);
+          saveToStorage(merged);
+          return merged;
+        });
+        setName('');
+        setMessage('');
+        setStatus('sent');
+        setTimeout(() => setStatus(''), 3000);
+      } else {
+        addLocally();
+      }
     } catch {
-      setStatus('error');
-      setTimeout(() => setStatus(''), 4000);
+      addLocally();
     } finally {
       setSending(false);
     }
@@ -95,10 +149,10 @@ function WishesSection() {
           <p className="section-subtitle" style={{ maxWidth: '500px', margin: '0 auto 1rem' }}>
             Leave a heartfelt message for the couple
           </p>
-          {liveCount > 0 && (
+          {wishes.length > 0 && (
             <div className="live-indicator">
               <span className="live-dot" />
-              <span>{liveCount} wish{liveCount !== 1 ? 'es' : ''} and counting</span>
+              <span>{wishes.length} wish{wishes.length !== 1 ? 'es' : ''} and counting</span>
             </div>
           )}
         </motion.div>
