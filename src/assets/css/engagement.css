@@ -520,6 +520,37 @@ body {
   box-shadow: 0 8px 30px rgba(183, 110, 121, 0.3);
 }
 
+.wish-form button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.live-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 16px;
+  background: rgba(183, 110, 121, 0.08);
+  border-radius: 20px;
+  font-size: 0.8rem;
+  color: var(--primary);
+  margin-bottom: 1.5rem;
+}
+
+.live-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--primary);
+  animation: livePulse 1.5s ease-in-out infinite;
+}
+
+@keyframes livePulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.8); }
+}
+
 /* Footer */
 .engagement-footer {
   padding: 3rem 0;
